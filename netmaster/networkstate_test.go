@@ -68,6 +68,11 @@ func (d *testNwStateDriver) ClearState(key string) error {
 	return d.validateKey(key)
 }
 
+func (d *testNwStateDriver) SafeClearState(key string, prevVal core.State,
+	marshal func(interface{}) ([]byte, error)) error {
+	return &core.Error{Desc: "Shouldn't be called!"}
+}
+
 func (d *testNwStateDriver) ReadState(key string, value core.State,
 	unmarshal func([]byte, interface{}) error) error {
 	return d.validateKey(key)
@@ -76,6 +81,13 @@ func (d *testNwStateDriver) ReadState(key string, value core.State,
 func (d *testNwStateDriver) WriteState(key string, value core.State,
 	marshal func(interface{}) ([]byte, error)) error {
 	return d.validateKey(key)
+}
+
+func (d *testNwStateDriver) SafeWriteState(key string, value core.State,
+	marshal func(interface{}) ([]byte, error),
+	prevVal func(core.State) core.State,
+	nextVal func(core.State) core.State) error {
+	return &core.Error{Desc: "Shouldn't be called!"}
 }
 
 func TestMasterNwConfigRead(t *testing.T) {

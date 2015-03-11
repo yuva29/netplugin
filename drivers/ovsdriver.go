@@ -206,7 +206,12 @@ func (d *OvsDriver) getPortOrIntfNameFromId(id string, isPort bool) (string, err
 			}
 		}
 	}
-	return "", &core.Error{Desc: fmt.Sprintf("Ovs port/intf not found for id: %s", id)}
+	str := "port"
+	if !isPort {
+		str = "intf"
+	}
+	return "", &core.Error{Desc: fmt.Sprintf("Ovs %s not found for id: %s",
+		str, id)}
 }
 
 func (d *OvsDriver) createDeletePort(portName, intfName, intfType, id string,

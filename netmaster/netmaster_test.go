@@ -73,6 +73,11 @@ func (d *fakeStateDriver) ClearState(key string) error {
 	return nil
 }
 
+func (d *fakeStateDriver) SafeClearState(key string, prevVal core.State,
+	marshal func(interface{}) ([]byte, error)) error {
+	return &core.Error{Desc: "Shouldn't be called!"}
+}
+
 func (d *fakeStateDriver) ReadState(key string, value core.State,
 	unmarshal func([]byte, interface{}) error) error {
 	encodedState, err := d.Read(key)
@@ -101,6 +106,13 @@ func (d *fakeStateDriver) WriteState(key string, value core.State,
 	}
 
 	return nil
+}
+
+func (d *fakeStateDriver) SafeWriteState(key string, value core.State,
+	marshal func(interface{}) ([]byte, error),
+	prevVal func(core.State) core.State,
+	nextVal func(core.State) core.State) error {
+	return &core.Error{Desc: "Shouldn't be called!"}
 }
 
 func (d *fakeStateDriver) DumpState() {
