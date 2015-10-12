@@ -50,7 +50,6 @@ build:
 
 clean: deps
 	rm -rf Godeps/_workspace/pkg
-	rm -rf $(GOPATH)/pkg
 	godep go clean -i -v ./...
 
 update:
