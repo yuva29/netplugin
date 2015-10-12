@@ -5,9 +5,6 @@
 # needed since some unit-tests depend on the external daemon like ovs, etcd
 # etc to be setup.
 
-USAGE="${0} -vagrant"
-
-run_in_vagrant=false
 test_packages="github.com/contiv/netplugin/drivers \
     github.com/contiv/netplugin/state \
     github.com/contiv/netplugin/plugin \
@@ -23,39 +20,9 @@ test_packages="github.com/contiv/netplugin/drivers \
 
 while [ "${#}" -gt 0 ]
 do
-    case "${1}" in
-        -vagrant)
-            run_in_vagrant=true
-            break;;
-        *)
-            echo "${USAGE}" 1>&2
-            exit 1;;
-    esac
-    shift
+  echo "This program requires no arguments."
+  exit 1
 done
-
-# running on host
-if ${run_in_vagrant}; then
-    (CONTIV_NODE_OS="${CONTIV_NODE_OS}" CONTIV_NODES=1 vagrant up)
-    ret=$?
-    if [ ${ret} -ne 0 ]; then
-        (CONTIV_NODES=1 vagrant destroy -f)
-        exit 1
-    fi
-
-    # XXX: running unit-tests require root permission due to dependence on ovs
-    # utilities. Need to find a way without 'sudo'.
-    (CONTIV_NODES=1 vagrant ssh netplugin-node1 -c 'sudo -E PATH=$PATH $GOSRC/github.com/contiv/netplugin/'${0})
-    ret=$?
-    if [ ${ret} -ne 0 ]; then
-        (CONTIV_NODES=1 vagrant destroy -f)
-        exit 1
-    fi
-
-    (CONTIV_NODES=1 vagrant destroy -f)
-    echo "Host: Tests succeeded!"
-    exit 0
-fi
 
 for pkg in ${test_packages}
 do

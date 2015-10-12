@@ -31,7 +31,7 @@ test: build unit-test system-test centos-tests
 default: build
 
 deps:
-	./scripts/deps
+	sudo -i bash -lc "source /etc/profile.d/envvar.sh && cd /opt/gopath/src/github.com/contiv/netplugin && scripts/deps"
 
 checks:
 	./scripts/checks "$(PKGS)"
@@ -46,7 +46,6 @@ run-build: deps checks clean
 build:
 	make start
 	vagrant ssh netplugin-node1 -c 'sudo -i bash -lc "source /etc/profile.d/envvar.sh && cd /opt/gopath/src/github.com/contiv/netplugin && make run-build"'
-	make stop
 
 clean: deps
 	rm -rf Godeps/_workspace/pkg
@@ -77,11 +76,11 @@ clean-dockerdemo:
 ssh:
 	@vagrant ssh netplugin-node1 || echo 'Please run "make demo"'
 
-unit-test: stop clean build
-	./scripts/unittests -vagrant
+unit-test: stop start build
+	vagrant ssh netplugin-node1 -c 'sudo -i bash -lc "source /etc/profile.d/envvar.sh && cd /opt/gopath/src/github.com/contiv/netplugin && scripts/unittests"'
 
 unit-test-centos: stop
-	CONTIV_NODE_OS=centos make clean build
+	CONTIV_NODE_OS=centos make start clean build
 	CONTIV_NODE_OS=centos ./scripts/unittests -vagrant
 
 # setting CONTIV_SOE=1 while calling 'make system-test' will stop the test
