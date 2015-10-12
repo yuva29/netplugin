@@ -25,7 +25,7 @@ echo 'export GOSRC=$GOPATH/src' >> /etc/profile.d/envvar.sh
 echo 'export PATH=$PATH:/usr/local/go/bin:$GOBIN' >> /etc/profile.d/envvar.sh
 echo "export http_proxy='$4'" >> /etc/profile.d/envvar.sh
 echo "export https_proxy='$5'" >> /etc/profile.d/envvar.sh
-echo "export no_proxy=192.168.0.0/16,localhost,127.0.0.0/8" >> /etc/profile.d/envvar.sh
+echo "export no_proxy=192.168.0.0/16,localhost,127.0.0.1" >> /etc/profile.d/envvar.sh
 
 source /etc/profile.d/envvar.sh
 
@@ -35,7 +35,7 @@ systemctl enable docker-tcp.socket
 
 mkdir /etc/systemd/system/docker.service.d
 echo "[Service]" | sudo tee -a /etc/systemd/system/docker.service.d/http-proxy.conf
-echo "Environment=\\\"no_proxy=192.168.0.0/16,localhost,127.0.0.0/8\\\" \\\"http_proxy=$http_proxy\\\" \\\"https_proxy=$https_proxy\\\"" | sudo tee -a /etc/systemd/system/docker.service.d/http-proxy.conf
+echo "Environment=\\\"no_proxy=192.168.0.0/16\\\" \\\"http_proxy=$http_proxy\\\" \\\"https_proxy=$https_proxy\\\"" | sudo tee -a /etc/systemd/system/docker.service.d/http-proxy.conf
 sudo systemctl daemon-reload
 sudo systemctl stop docker
 sudo systemctl start docker-tcp.socket
