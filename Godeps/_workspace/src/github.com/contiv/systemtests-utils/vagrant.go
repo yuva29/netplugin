@@ -19,8 +19,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/contiv/netplugin/core"
+	"sync"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -28,11 +27,13 @@ import (
 // Vagrant implements a vagrant based testbed
 type Vagrant struct {
 	expectedNodes int
-	nodes         []TestbedNode
+	nodes         map[string]TestbedNode
 }
 
 // Setup brings up a vagrant testbed
 func (v *Vagrant) Setup(start bool, env string, numNodes int) error {
+	v.nodes = map[string]TestbedNode{}
+
 	vCmd := &VagrantCommand{ContivNodes: numNodes, ContivEnv: env}
 
 	if start {
@@ -66,7 +67,7 @@ func (v *Vagrant) Setup(start bool, env string, numNodes int) error {
 	}
 	nodeNamesBytes := re.FindAll(output, -1)
 	if nodeNamesBytes == nil {
-		err = core.Errorf("No running nodes found in vagrant status output: \n%s\n",
+		err = fmt.Errorf("No running nodes found in vagrant status output: \n%s\n",
 			output)
 		return err
 	}
@@ -76,7 +77,7 @@ func (v *Vagrant) Setup(start bool, env string, numNodes int) error {
 		nodeNames = append(nodeNames, nodeName)
 	}
 	if len(nodeNames) != numNodes {
-		err = core.Errorf("Number of running node(s) (%d) is not equal to number of expected node(s) (%d) in vagrant status output: \n%s\n",
+		err = fmt.Errorf("Number of running node(s) (%d) is not equal to number of expected node(s) (%d) in vagrant status output: \n%s\n",
 			len(nodeNames), numNodes, output)
 		return err
 	}
@@ -86,7 +87,7 @@ func (v *Vagrant) Setup(start bool, env string, numNodes int) error {
 	// correctly filter the output based on passed host-name. So filtering
 	// the output ourselves below.
 	if output, err = vCmd.RunWithOutput("ssh-config"); err != nil {
-		return core.Errorf("Error running vagrant ssh-config. Error: %s. Output: \n%s\n", err, output)
+		return fmt.Errorf("Error running vagrant ssh-config. Error: %s. Output: \n%s\n", err, output)
 	}
 
 	if re, err = regexp.Compile("Host [a-zA-Z0-9_-]+|Port [0-9]+|IdentityFile .*"); err != nil {
@@ -95,7 +96,7 @@ func (v *Vagrant) Setup(start bool, env string, numNodes int) error {
 
 	nodeInfosBytes := re.FindAll(output, -1)
 	if nodeInfosBytes == nil {
-		return core.Errorf("Failed to find node info in vagrant ssh-config output: \n%s\n", output)
+		return fmt.Errorf("Failed to find node info in vagrant ssh-config output: \n%s\n", output)
 	}
 
 	// got the names, now fill up the vagrant-nodes structure
@@ -109,16 +110,16 @@ func (v *Vagrant) Setup(start bool, env string, numNodes int) error {
 			}
 		}
 		if nodeInfoPos == -1 {
-			return core.Errorf("Failed to find %q info in vagrant ssh-config output: \n%s\n", nodeName, output)
+			return fmt.Errorf("Failed to find %q info in vagrant ssh-config output: \n%s\n", nodeName, output)
 		}
 		port := ""
 		if n, err := fmt.Sscanf(string(nodeInfosBytes[nodeInfoPos+1]), "Port %s", &port); n == 0 || err != nil {
-			return core.Errorf("Failed to find %q port info in vagrant ssh-config output: \n%s\n. Error: %s",
+			return fmt.Errorf("Failed to find %q port info in vagrant ssh-config output: \n%s\n. Error: %s",
 				nodeName, nodeInfosBytes[nodeInfoPos+1], err)
 		}
 		privKeyFile := ""
 		if n, err := fmt.Sscanf(string(nodeInfosBytes[nodeInfoPos+2]), "IdentityFile %s", &privKeyFile); n == 0 || err != nil {
-			return core.Errorf("Failed to find %q identity file info in vagrant ssh-config output: \n%s\n. Error: %s",
+			return fmt.Errorf("Failed to find %q identity file info in vagrant ssh-config output: \n%s\n. Error: %s",
 				nodeName, nodeInfosBytes[nodeInfoPos+2], err)
 		}
 		log.Infof("Adding node: %q(%s:%s)", nodeName, port, privKeyFile)
@@ -126,7 +127,7 @@ func (v *Vagrant) Setup(start bool, env string, numNodes int) error {
 		if node, err = NewVagrantNode(nodeName, port, privKeyFile); err != nil {
 			return err
 		}
-		v.nodes = append(v.nodes, TestbedNode(node))
+		v.nodes[node.GetName()] = TestbedNode(node)
 	}
 
 	return nil
@@ -145,11 +146,56 @@ func (v *Vagrant) Teardown() {
 			err, output)
 	}
 
-	v.nodes = []TestbedNode{}
+	v.nodes = map[string]TestbedNode{}
 	v.expectedNodes = 0
+}
+
+// GetNode obtains a node by name.
+func (v *Vagrant) GetNode(name string) TestbedNode {
+	return v.nodes[name]
 }
 
 // GetNodes returns the nodes in a vagrant setup
 func (v *Vagrant) GetNodes() []TestbedNode {
-	return v.nodes
+	var ret []TestbedNode
+	for _, value := range v.nodes {
+		ret = append(ret, value)
+	}
+
+	return ret
+}
+
+// IterateNodes walks each host and executes the function supplied. On error,
+// it waits for all hosts to complete before returning the error.
+func (v *Vagrant) IterateNodes(fn func(TestbedNode) error) error {
+	wg := sync.WaitGroup{}
+	nodes := v.GetNodes()
+	errChan := make(chan error, len(nodes))
+
+	for _, node := range nodes {
+		wg.Add(1)
+
+		go func(node TestbedNode) {
+			if err := fn(node); err != nil {
+				errChan <- fmt.Errorf(`Error: "%v" on host: %q"`, err, node.GetName())
+			}
+			wg.Done()
+		}(node)
+	}
+
+	wg.Wait()
+
+	select {
+	case err := <-errChan:
+		return err
+	default:
+		return nil
+	}
+}
+
+// SSHAllNodes will ssh into each host and run the specified command.
+func (v *Vagrant) SSHAllNodes(cmd string) error {
+	return v.IterateNodes(func(node TestbedNode) error {
+		return node.RunCommand(cmd)
+	})
 }
