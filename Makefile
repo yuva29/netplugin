@@ -63,7 +63,7 @@ demo-centos:
 	CONTIV_NODE_OS=centos make demo
 
 stop:
-	CONTIV_NODES=$${CONTIV_NODES:-2} vagrant destroy -f
+	CONTIV_NODES=$${CONTIV_NODES:-2} bash -c 'if [ "x$$CONTIV_NOSTOP" == "x" ]; then vagrant destroy -f; fi'
 
 demo: stop start
 
