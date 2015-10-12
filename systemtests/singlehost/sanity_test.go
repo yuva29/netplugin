@@ -211,7 +211,7 @@ func TestSingleHostDefaultNetwork_sanity(t *testing.T) {
             "Name"                      : "tee-one",
             "DefaultNetType"            : "vlan",
             "DefaultNetwork"            : "orange",
-            "SubnetPool"                : "100.1.0.0/16",
+            "SubnetPool"                : "10.240.0.0/16",
             "AllocSubnetLen"            : 24,
             "Vlans"                     : "11-48",
             "Networks"  : [ {
@@ -253,7 +253,7 @@ func TestSingleHostDefaultNetwork_sanity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error - unable to get default ip route, output = '%s'", output)
 	}
-	if !strings.Contains(output, "default via 100.1.0.254") {
+	if !strings.Contains(output, "default via 10.240.0.254") {
 		t.Fatalf("Error - unable to confirm container's default ip route, output = '%s'", output)
 	}
 
@@ -280,7 +280,7 @@ func TestSingleHostDefaultNetwork_sanity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error - unable to get default ip route, output = '%s'", output)
 	}
-	if strings.Contains(output, "default via 100.1.0.254") {
+	if strings.Contains(output, "default via 10.240.0.254") {
 		t.Fatalf("Error - able to still find the default rout after network is deleted output = '%s'", output)
 	}
 

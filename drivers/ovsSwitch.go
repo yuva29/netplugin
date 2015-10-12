@@ -22,11 +22,10 @@ import (
 	"time"
 
 	"github.com/contiv/netplugin/core"
-	"github.com/contiv/netplugin/netutils"
+	"github.com/contiv/netplugin/drivers/netlinkutils"
 	"github.com/contiv/ofnet"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/vishvananda/netlink"
 )
 
 const useVethPair = true
@@ -134,68 +133,6 @@ func (sw *OvsSwitch) DeleteNetwork(pktTag uint16, extPktTag uint32) error {
 	return nil
 }
 
-// createVethPair creates veth interface pairs with specified name
-func createVethPair(name1, name2 string) error {
-	log.Infof("Creating Veth pairs with name: %s, %s", name1, name2)
-
-	// Veth pair params
-	veth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{
-			Name:   name1,
-			TxQLen: 0,
-		},
-		PeerName: name2,
-	}
-
-	// Create the veth pair
-	if err := netlink.LinkAdd(veth); err != nil {
-		log.Errorf("error creating veth pair: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-// deleteVethPair deletes veth interface pairs
-func deleteVethPair(name1, name2 string) error {
-	log.Infof("Deleting Veth pairs with name: %s, %s", name1, name2)
-
-	// Veth pair params
-	veth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{
-			Name:   name1,
-			TxQLen: 0,
-		},
-		PeerName: name2,
-	}
-
-	// Create the veth pair
-	if err := netlink.LinkDel(veth); err != nil {
-		log.Errorf("error deleting veth pair: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-// setLinkUp sets the link up
-func setLinkUp(name string) error {
-	iface, err := netlink.LinkByName(name)
-	if err != nil {
-		return err
-	}
-	return netlink.LinkSetUp(iface)
-}
-
-// Set the link mtu
-func setLinkMtu(name string, mtu int) error {
-	iface, err := netlink.LinkByName(name)
-	if err != nil {
-		return err
-	}
-	return netlink.LinkSetMTU(iface, mtu)
-}
-
 // getOvsPostName returns OVS port name depending on if we use Veth pairs
 func getOvsPostName(intfName string) string {
 	var ovsPortName string
@@ -221,14 +158,14 @@ func (sw *OvsSwitch) CreatePort(intfName string, cfgEp *OvsCfgEndpointState, pkt
 		ovsIntfType = ""
 
 		// Create a Veth pair
-		err := createVethPair(intfName, ovsPortName)
+		err := netlinkutils.CreateVethPair(intfName, ovsPortName)
 		if err != nil {
 			log.Errorf("Error creating veth pairs. Err: %v", err)
 			return err
 		}
 
 		// Set the OVS side of the port as up
-		err = setLinkUp(ovsPortName)
+		err = netlinkutils.SetLinkUp(ovsPortName)
 		if err != nil {
 			log.Errorf("Error setting link %s up. Err: %v", ovsPortName, err)
 			return err
@@ -241,7 +178,7 @@ func (sw *OvsSwitch) CreatePort(intfName string, cfgEp *OvsCfgEndpointState, pkt
 
 	// Set the link mtu to 1450 to allow for 50 bytes vxlan encap
 	// (inner eth header(14) + outer IP(20) outer UDP(8) + vxlan header(8))
-	err := setLinkMtu(intfName, vxlanEndpointMtu)
+	err := netlinkutils.SetLinkMtu(intfName, vxlanEndpointMtu)
 	if err != nil {
 		log.Errorf("Error setting link %s mtu. Err: %v", intfName, err)
 		return err
@@ -262,7 +199,7 @@ func (sw *OvsSwitch) CreatePort(intfName string, cfgEp *OvsCfgEndpointState, pkt
 	time.Sleep(300 * time.Millisecond)
 
 	// Set the interface mac address
-	err = netutils.SetInterfaceMac(intfName, cfgEp.MacAddress)
+	err = netlinkutils.SetInterfaceMac(intfName, cfgEp.MacAddress)
 	if err != nil {
 		log.Errorf("Error setting interface Mac %s on port %s", cfgEp.MacAddress, intfName)
 		return err
@@ -349,7 +286,7 @@ func (sw *OvsSwitch) DeletePort(epOper *OvsOperEndpointState) error {
 	// Delete the Veth pairs if required
 	if useVethPair {
 		// Delete a Veth pair
-		err := deleteVethPair(ovsPortName, epOper.PortName)
+		err := netlinkutils.DeleteVethPair(ovsPortName, epOper.PortName)
 		if err != nil {
 			log.Errorf("Error creating veth pairs. Err: %v", err)
 			// Continue to cleanup remaining state

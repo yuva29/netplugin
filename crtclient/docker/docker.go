@@ -20,13 +20,10 @@ import (
 	"os/exec"
 	"path"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/contiv/netplugin/core"
 	"github.com/contiv/netplugin/crtclient"
 	"github.com/samalba/dockerclient"
-	"github.com/vishvananda/netlink"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -88,32 +85,6 @@ func (d *Docker) getContPid(ctx *crtclient.ContainerEPContext) (string, error) {
 	}
 
 	return strconv.Itoa(contInfo.State.Pid), nil
-}
-
-func setIfNs(ifname string, pid int) error {
-	link, err := netlink.LinkByName(ifname)
-	if err != nil {
-		if !strings.Contains(err.Error(), "Link not found") {
-			log.Errorf("unable to find link %q. Error: %q", ifname, err)
-			return err
-		}
-		// try once more as sometimes (somehow) link creation is taking
-		// sometime, causing link not found error
-		time.Sleep(1 * time.Second)
-		link, err = netlink.LinkByName(ifname)
-		if err != nil {
-			log.Errorf("unable to find link %q. Error %q", ifname, err)
-			return err
-		}
-	}
-
-	err = netlink.LinkSetNsPid(link, pid)
-	if err != nil {
-		log.Errorf("unable to move interface '%s' to pid %d. Error: %s",
-			ifname, pid, err)
-	}
-
-	return err
 }
 
 // Note: most of the work in this function is a temporary workaround for

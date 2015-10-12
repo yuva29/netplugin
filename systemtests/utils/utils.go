@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -27,13 +28,15 @@ import (
 	"github.com/contiv/netplugin/core"
 	"github.com/contiv/netplugin/drivers"
 	"github.com/contiv/netplugin/netmaster/intent"
-	u "github.com/contiv/netplugin/utils"
 	stu "github.com/contiv/systemtests-utils"
 
 	log "github.com/Sirupsen/logrus"
 )
 
 const (
+	// ConsulNameStr is a string constant for consul state-store
+	consulNameStr = "consul"
+
 	examplesDir = "/src/github.com/contiv/netplugin/examples/"
 )
 
@@ -193,21 +196,31 @@ func getEchoCompatibleStr(inStr string) string {
 func applyConfig(t *testing.T, cfgType, jsonCfg string, node stu.TestbedNode, stateStore string) {
 	// replace newlines with space and "(quote) with \"(escaped quote) for
 	// echo to consume and produce desired json config
-	jsonCfg = getEchoCompatibleStr(jsonCfg)
-	cmdStr := fmt.Sprintf("echo \"%s\" > /tmp/netdcli.cfg", jsonCfg)
-	output, err := node.RunCommandWithOutput(cmdStr)
+	f, err := os.Create("/tmp/netdcli.cfg")
 	if err != nil {
-		t.Fatalf("Error '%s' creating config file\nCmd: %q\n Output : %s \n",
-			err, cmdStr, output)
+		t.Fatal(err)
 	}
-	cmdStr = "netdcli -" + cfgType + " /tmp/netdcli.cfg 2>&1"
+
+	if _, err := f.WriteString(jsonCfg); err != nil {
+		t.Fatal(err)
+	}
+
+	f.Close()
+
+	cmdStr := []string{"-" + cfgType, "/tmp/netdcli.cfg"}
 	if stateStore != "" {
-		cmdStr = "netdcli -state-store " + stateStore + " -" + cfgType + " /tmp/netdcli.cfg 2>&1"
+		cmdStr = []string{"-state-store", stateStore, "-" + cfgType, "/tmp/netdcli.cfg"}
 	}
-	output, err = node.RunCommandWithOutput(cmdStr)
+
+	output, err := exec.Command("which", "netdcli").Output()
+	if err != nil || len(output) == 0 {
+		t.Fatalf("Could not locate netdcli in your PATH: Error (if any): %v", err)
+	}
+
+	output, err = exec.Command(strings.TrimSpace(string(output)), cmdStr...).CombinedOutput()
 	if err != nil {
-		t.Fatalf("Failed to apply config. Error: %s\nCmd: %q\n Output : %s\n",
-			err, cmdStr, output)
+		t.Fatalf("Failed to apply config. Is `netdcli` in your $PATH? Error: %s\nCmd: %q\n Output : %s\n",
+			err, cmdStr, string(output))
 	}
 }
 
@@ -218,7 +231,7 @@ func AddConfig(t *testing.T, jsonCfg string, node stu.TestbedNode) {
 
 // AddConfigConsul issues netdcli with -add-cfg flag and uses consul state-store
 func AddConfigConsul(t *testing.T, jsonCfg string, node stu.TestbedNode) {
-	applyConfig(t, "add-cfg", jsonCfg, node, u.ConsulNameStr)
+	applyConfig(t, "add-cfg", jsonCfg, node, consulNameStr)
 }
 
 // DelConfig issues netdcli with -del-cfg flag
@@ -228,7 +241,7 @@ func DelConfig(t *testing.T, jsonCfg string, node stu.TestbedNode) {
 
 // DelConfigConsul issues netdcli with -del-cfg flag and uses consul state-store
 func DelConfigConsul(t *testing.T, jsonCfg string, node stu.TestbedNode) {
-	applyConfig(t, "del-cfg", jsonCfg, node, u.ConsulNameStr)
+	applyConfig(t, "del-cfg", jsonCfg, node, consulNameStr)
 }
 
 // ApplyDesiredConfig issues netdcli with -cfg flag
@@ -238,7 +251,7 @@ func ApplyDesiredConfig(t *testing.T, jsonCfg string, node stu.TestbedNode) {
 
 // ApplyDesiredConfigConsul issues netdcli with -cfg flag and uses consul state-store
 func ApplyDesiredConfigConsul(t *testing.T, jsonCfg string, node stu.TestbedNode) {
-	applyConfig(t, "cfg", jsonCfg, node, u.ConsulNameStr)
+	applyConfig(t, "cfg", jsonCfg, node, consulNameStr)
 }
 
 // ApplyHostBindingsConfig issues netdcli with -host-bindings-cfg flag

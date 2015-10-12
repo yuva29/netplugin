@@ -65,16 +65,16 @@ func TestTwoHostsSingleVlanPingSuccess_sanity(t *testing.T) {
 	node1 := testbed.GetNodes()[0]
 	node2 := testbed.GetNodes()[1]
 
-	utils.StartServer(t, node1, "myContainer1")
 	defer func() {
 		utils.DockerCleanup(t, node1, "myContainer1")
 	}()
+	utils.StartServer(t, node1, "myContainer1")
 
 	ipAddress := utils.GetIPAddress(t, node1, "orange-myContainer1", u.EtcdNameStr)
-	utils.StartClient(t, node2, "myContainer2", ipAddress)
 	defer func() {
 		utils.DockerCleanup(t, node2, "myContainer2")
 	}()
+	utils.StartClient(t, node2, "myContainer2", ipAddress)
 }
 
 func TestTwoHostsMultiVlanPingSuccess_sanity(t *testing.T) {

@@ -86,11 +86,6 @@ func (n *VagrantNode) RunCommand(cmd string) error {
 	}
 	defer s.Close()
 
-	if err := s.RequestPty("vt100", 80, 25, ssh.TerminalModes{}); err != nil {
-		fmt.Println(err)
-		return err
-	}
-
 	return s.Run(newCmdStrWithSource(cmd))
 }
 
