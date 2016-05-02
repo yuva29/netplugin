@@ -21,6 +21,10 @@ var networkDriverRegistry = map[string]driverConfigTypes{
 		DriverType: reflect.TypeOf(drivers.OvsDriver{}),
 		ConfigType: reflect.TypeOf(drivers.OvsDriverConfig{}),
 	},
+	OpflexNameStr: driverConfigTypes{
+		DriverType: reflect.TypeOf(drivers.OpflexDriver{}),
+		ConfigType: reflect.TypeOf(drivers.OpflexDriverConfig{}),
+	},
 	// fakedriver is used for tests, so not exposing a public name for it.
 	"fakedriver": driverConfigTypes{
 		DriverType: reflect.TypeOf(drivers.FakeNetEpDriver{}),
@@ -51,6 +55,8 @@ const (
 	ConsulNameStr = "consul"
 	// OvsNameStr is a string constant for ovs driver
 	OvsNameStr = "ovs"
+	// OpflexNameStr is a string constant for opflex driver
+	OpflexNameStr = "opflex"
 )
 
 var (

@@ -399,6 +399,8 @@ func main() {
 		},
 	}
 
+	pluginConfig.Drivers.Network = "opflex"
+
 	svcplugin.QuitCh = make(chan struct{})
 	defer close(svcplugin.QuitCh)
 
