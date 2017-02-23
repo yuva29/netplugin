@@ -33,6 +33,10 @@ func (s *systemtestSuite) NewK8sExec(n *node) *kubernetes {
 	return k8
 }
 
+func (s *systemtestSuite) getMaster() *node {
+	return k8master
+}
+
 func (k *kubernetes) newContainer(node *node, containerID, name string, spec containerSpec) (*container, error) {
 	cont := &container{
 		node:        node,
@@ -70,12 +74,6 @@ func (k *kubernetes) runContainer(spec containerSpec) (*container, error) {
 		labels = append(labels, "io.contiv.network="+spec.networkName)
 	}
 
-	labelstr = strings.Join(labels, ",")
-
-	if len(labelstr) != 0 {
-		labelstr = "--labels=" + labelstr
-	}
-
 	image = "--image=contiv/alpine " //contiv/nc-busybox"
 
 	cmdStr := " --command -- sleep 900000"
@@ -85,10 +83,15 @@ func (k *kubernetes) runContainer(spec containerSpec) (*container, error) {
 	}
 
 	if len(spec.labels) > 0 {
-		l := " --labels="
 		for _, label := range spec.labels {
-			labelstr += l + label + " "
+			labels = append(labels, label)
 		}
+	}
+
+	labelstr = strings.Join(labels, ",")
+
+	if len(labelstr) != 0 {
+		labelstr = "--labels=" + labelstr
 	}
 
 	cmd := fmt.Sprintf("kubectl run %s %s %s --restart=Never %s ", namestr, labelstr, image, cmdStr)
@@ -328,7 +331,7 @@ func (k *kubernetes) startIperfClient(c *container, ip, limit string, isErr bool
 					logrus.Errorf("Obtained Bandwidth:%s is more than the limit: %s", strings.TrimSpace(bwString[1]), limit)
 				} else {
 					logrus.Errorf("Obtained bandwidth:%s is more than the limit %s", bwString[1], limit)
-					return errors.New("Applied bandwidth is more than bandwidth rate!")
+					return errors.New("Applied bandwidth is more than bandwidth rate")
 				}
 			} else {
 				logrus.Errorf("Bandwidth rate :%s not applied", limit)
@@ -388,6 +391,7 @@ func (k *kubernetes) checkConnection(c *container, ipaddr, protocol string, port
 	logrus.Infof("Checking connection from %s to ip %s on port %d", c, ipaddr, port)
 
 	out, err := k.exec(c, fmt.Sprintf("nc -z -n -v -w 1 %s %s %v", protoStr, ipaddr, port))
+	time.Sleep(time.Minute * 2)
 	if err != nil && !strings.Contains(out, "open") {
 		logrus.Errorf("Connection from %v to ip %s on port %d FAILED", *c, ipaddr, port)
 	} else {
@@ -403,7 +407,7 @@ func (k *kubernetes) checkNoConnection(c *container, ipaddr, protocol string, po
 	if err := k.checkConnection(c, ipaddr, protocol, port); err != nil {
 		return nil
 	}
-	return fmt.Errorf("Connection SUCCEEDED on port %d from %s from %v when it should have FAILED.", port, ipaddr, c)
+	return fmt.Errorf("Connection SUCCEEDED on port %d from %s from %v when it should have FAILED", port, ipaddr, c)
 }
 
 /*
@@ -579,7 +583,7 @@ func (k *kubernetes) checkNoConnectionRetry(c *container, ipaddr, protocol strin
 		return nil
 	}
 
-	return fmt.Errorf("Connection SUCCEEDED on port %d from %s from %s when it should have FAILED.", port, ipaddr, c)
+	return fmt.Errorf("Connection SUCCEEDED on port %d from %s from %s when it should have FAILED", port, ipaddr, c)
 }
 
 func (k *kubernetes) checkPing6WithCount(c *container, ipaddr string, count int) error {

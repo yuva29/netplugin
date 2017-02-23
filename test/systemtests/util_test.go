@@ -622,7 +622,7 @@ func (s *systemtestSuite) checkIperfAcrossGroup(containers []*container, contain
 
 func (s *systemtestSuite) checkIngressRate(containers []*container, bw string) error {
 	for _, cont := range containers {
-	  fmt.Printf("Checking IngressRate for container %s for bw :%s ",cont,bw)
+		fmt.Printf("Checking IngressRate for container %s for bw :%s ", cont, bw)
 		err := cont.node.exec.tcFilterShow(bw)
 		return err
 	}
