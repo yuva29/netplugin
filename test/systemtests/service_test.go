@@ -2,6 +2,7 @@ package systemtests
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -982,26 +983,89 @@ func (s *systemtestSuite) createServices(c *C, numServices int, tenant string, s
 	services := []*client.ServiceLB{}
 	serviceIPs := []string{}
 
-	for serviceNum := 0; serviceNum < numServices; serviceNum++ {
-		service := &client.ServiceLB{
-			ServiceName: fmt.Sprintf("svc-%d-%s", serviceNum, tenant),
-			TenantName:  tenant,
-			NetworkName: svcNetwork,
-			Ports:       []string{"80:8080:TCP", "643:7070:UDP"},
+	switch s.basicInfo.Scheduler {
+	case "k8":
+		slctrs := []string{}
+
+		for serviceNum := 0; serviceNum < numServices; serviceNum++ {
+			svcName := fmt.Sprintf("svc-%d-%s", serviceNum, tenant)
+
+			for index := serviceNum; index < serviceNum+numLabels; index++ {
+				slctrs = append(slctrs, fmt.Sprintf("\"key%d\""+":"+"\"value%d\"", index, index+1))
+			}
+
+			serviceObj := `{"kind":"Service", "apiVersion": "v1", "metadata": { "name": "` + svcName + `"},
+                      "spec": {
+                        "selector": {` + strings.Join(slctrs, ",") + `},
+                        "ports":[
+                          {"name": "tcp", "port": 80, "targetPort": 8080, "protocol": "TCP"},
+                          {"name": "udp", "port": 643, "targetPort": 7070, "protocol": "UDP"}
+                        ]
+                      }
+                    }`
+
+			// write JSON service object to a file
+			f, err := os.Create("service.json")
+			c.Assert(err, IsNil)
+			defer f.Close()
+			f.WriteString(serviceObj)
+
+			// create service
+			cmd := "kubectl create -f /opt/gopath/src/github.com/contiv/netplugin/test/systemtests/service.json"
+			_, err = s.getMaster().runCommand(cmd)
+			c.Assert(err, IsNil)
+
+			// find the IP of the above created service
+			var svcIP string
+			cmd = "kubectl describe service " + svcName + " | grep -o \"[0-9]\\{1,3\\}\\.[0-9]\\{1,3\\}\\.[0-9]\\{1,3\\}\\.[0-9]\\{1,3\\}\""
+			for i := 0; i < 50; i++ {
+				time.Sleep(5 * time.Second)
+				svcIP, err = s.getMaster().runCommand(cmd)
+				svcIP = strings.TrimSpace(svcIP)
+				c.Assert(err, IsNil)
+
+				if len(svcIP) > 0 {
+					break
+				}
+			}
+
+			c.Assert(len(svcIP) > 0, Equals, true)
+
+			service := &client.ServiceLB{
+				ServiceName: svcName,
+				TenantName:  tenant,
+				Ports:       []string{"80:8080:TCP", "643:7070:UDP"},
+			}
+
+			for index := serviceNum; index < serviceNum+numLabels; index++ {
+				service.Selectors = append(service.Selectors, fmt.Sprintf("key%d=value%d", index, index+1))
+			}
+
+			services = append(services, service)
+			serviceIPs = append(serviceIPs, svcIP)
 		}
-		for index := serviceNum; index < serviceNum+numLabels; index++ {
-			service.Selectors = append(service.Selectors, fmt.Sprintf("key%d=value%d", index, index+1))
+	default:
+		for serviceNum := 0; serviceNum < numServices; serviceNum++ {
+			service := &client.ServiceLB{
+				ServiceName: fmt.Sprintf("svc-%d-%s", serviceNum, tenant),
+				TenantName:  tenant,
+				NetworkName: svcNetwork,
+				Ports:       []string{"80:8080:TCP", "643:7070:UDP"},
+			}
+
+			for index := serviceNum; index < serviceNum+numLabels; index++ {
+				service.Selectors = append(service.Selectors, fmt.Sprintf("key%d=value%d", index, index+1))
+			}
+
+			c.Assert(s.cli.ServiceLBPost(service), IsNil)
+			logrus.Infof("Creating service %s tenant %s on network %s with label %v", service.ServiceName, tenant, svcNetwork, service.Selectors)
+			services = append(services, service)
+
+			// Get service IP
+			svcInspect, err := s.cli.ServiceLBInspect(tenant, service.ServiceName)
+			c.Assert(err, IsNil)
+			serviceIPs = append(serviceIPs, svcInspect.Oper.ServiceVip)
 		}
-
-		c.Assert(s.cli.ServiceLBPost(service), IsNil)
-		logrus.Infof("Creating service %s tenant %s on network %s with label %v", service.ServiceName, tenant, svcNetwork, service.Selectors)
-		services = append(services, service)
-
-		// Get service IP
-		svcInspect, err := s.cli.ServiceLBInspect(tenant, service.ServiceName)
-		c.Assert(err, IsNil)
-		serviceIPs = append(serviceIPs, svcInspect.Oper.ServiceVip)
-
 	}
 
 	return services, serviceIPs
@@ -1040,9 +1104,18 @@ func (s *systemtestSuite) deleteServiceNetworks(c *C, tenant string, networks []
 }
 
 func (s *systemtestSuite) deleteServices(c *C, tenant string, services []*client.ServiceLB) {
-	for _, service := range services {
-		logrus.Infof("Deleting service %s on tenant %s , len(%d)", service.ServiceName, tenant, len(services))
-		c.Assert(s.cli.ServiceLBDelete(tenant, service.ServiceName), IsNil)
+	switch s.basicInfo.Scheduler {
+	case "k8":
+		for _, service := range services {
+			cmd := "kubectl delete service " + service.ServiceName
+			_, err := s.getMaster().runCommand(cmd)
+			c.Assert(err, IsNil)
+		}
+	default:
+		for _, service := range services {
+			logrus.Infof("Deleting service %s on tenant %s , len(%d)", service.ServiceName, tenant, len(services))
+			c.Assert(s.cli.ServiceLBDelete(tenant, service.ServiceName), IsNil)
+		}
 	}
 }
 
